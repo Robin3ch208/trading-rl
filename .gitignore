@@ -1,0 +1,32 @@
+# IDE
+.vscode/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+
+# OS / Windows artifacts
+*:Zone.Identifier
+.DS_Store
+Thumbs.db
+
+# Data (not versioned)
+data/
+*.csv
+*.parquet
+*.zip
+
+# Outputs (training runs)
+logs/
+tensorboard_logs/
+checkpoint/
+best_model/
+*.png
+
+# Test/CI caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/

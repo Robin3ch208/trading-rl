@@ -1,0 +1,70 @@
+# -------------------------------------------------------------------------
+# CONFIGURATION DE L'INTÉGRATION CONTINUE (CI)
+# Ce fichier définit le protocole automatisé de validation du code.
+# Il garantit la reproductibilité des résultats de recherche.
+# -------------------------------------------------------------------------
+
+# 'name' définit l'intitulé du workflow dans l'interface GitHub Actions.
+name: CI
+
+# Définition des événements déclencheurs du protocole.
+on:
+  push:          # Exécution automatique lors de l'envoi de modifications.
+  pull_request:  # Vérification systématique avant la fusion de nouvelles fonctionnalités.
+
+# Organisation des tâches automatisées.
+jobs:
+  # Définition du job de test pour valider l'intégrité du projet.
+  test:
+    # Sélection de l'environnement d'exécution (serveur distant Ubuntu Linux).
+    # L'utilisation de 'latest' assure l'usage des derniers correctifs de sécurité.
+    runs-on: ubuntu-latest
+
+    # Liste chronologique des étapes du protocole de test.
+    steps:
+      
+      # 1. Extraction du code source (Checkout)
+      # On télécharge l'arborescence du projet sur l'instance virtuelle.
+      - uses: actions/checkout@v4
+
+      # 2. Configuration de l'interpréteur Python
+      # On initialise l'environnement avec la version spécifique à l'étude.
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          # On fixe la version 3.12 pour assurer la cohérence des calculs.
+          python-version: "3.12"
+
+      # 3. Installation des dépendances et du module local
+      # On procède à l'installation des librairies nécessaires à l'exécution.
+      - name: Install (dev)
+        run: |
+          # Mise à jour de l'outil de gestion des paquets (pip).
+          python -m pip install --upgrade pip
+          # Installation du projet en mode éditable avec les outils de diagnostic.
+          # L'option [dev] inclut les librairies de test et de linter.
+          python -m pip install -e ".[dev]"
+
+      # 4. Analyse statique de la qualité du code (Linting)
+      # On vérifie la conformité du code aux standards PEP 8 avec l'outil Ruff.
+      - name: Ruff
+        run: |
+          # On analyse les répertoires sources (src) et de tests (tests).
+          # Le processus s'interrompt en cas de détection d'anomalies de syntaxe.
+          python -m ruff check src tests
+
+      # 5.bis VÉRIFICATION DU TYPAGE (MYPY)
+      # On s'assure que les types (float, int, etc.) sont cohérents dans tout le projet.
+      - name: MyPy
+        run: |
+          # On analyse le dossier source. 
+          # --strict demande une rigueur maximale (idéal pour le R&D).
+          python -m mypy src --strict
+
+      # 6. Exécution des tests unitaires et d'intégration
+      # On valide la logique métier et les calculs financiers via Pytest.
+      - name: Pytest
+        run: |
+          # Lancement de la suite de tests automatisés.
+          # Cette étape certifie la fiabilité des algorithmes de trading développés.
+          python -m pytest

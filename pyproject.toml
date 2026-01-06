@@ -1,0 +1,95 @@
+[build-system]
+# 'requires' : définit la liste des paquets Python strictement nécessaires 
+# pour que le processus de "build" (construction) puisse démarrer.
+# - setuptools>=68 : l'outil qui va lire le reste du fichier TOML pour organiser l'installation.
+# - wheel : un format de distribution binaire qui permet de préparer le projet 
+#   pour qu'il soit installé instantanément sans compilation laborieuse sur la machine cible.
+requires = ["setuptools>=68", "wheel"]
+
+# 'build-backend' : désigne l'objet Python spécifique qui va piloter la construction.
+# En indiquant "setuptools.build_meta", on délègue la logique de création 
+# du paquet à Setuptools, qui est le moteur de construction le plus robuste du marché.
+build-backend = "setuptools.build_meta"
+
+[project]
+# Nom technique utilisé pour l'identification du paquet.
+name = "forex-rl-trading"
+
+# Version du logiciel (format Majeur.Mineur.Correctif).
+version = "0.1.0"
+
+# Résumé de l'objet de recherche pour la documentation technique.
+description = "R&D: PPO-based FX trading strategy research on EURUSD tick data."
+
+# Point d'entrée de la documentation textuelle du projet.
+readme = "README.md"
+
+# Version minimale de l'interpréteur Python pour garantir la compatibilité des syntaxes.
+requires-python = ">=3.10"
+
+# Type de licence régissant l'utilisation du code source.
+license = { text = "Proprietary" }
+
+# Identification de l'auteur principal des travaux.
+authors = [{ name = "Robin" }]
+
+# Dépendances de production : Bibliothèques indispensables à l'exécution de l'algorithme.
+dependencies = [
+  "numpy>=1.24",     # Gestion des structures de données numériques.
+  "pandas>=2.0",    # Analyse et manipulation de séries temporelles (ticks).
+  "gymnasium>=0.29", # Interface standard pour les environnements d'apprentissage par renforcement.
+]
+
+[project.optional-dependencies]
+# Groupe 'dev' : Outils de validation utilisés dans le workflow d'intégration continue (CI).
+dev = [
+  "pytest>=8.0",   # Framework de tests automatisés.
+  "ruff>=0.4",     # Outil d'analyse statique (Linting) pour la conformité du code.
+  "mypy>=1.8",     # Vérificateur de cohérence des types de données.
+  "pandas-stubs",  # Définitions de types pour la bibliothèque Pandas.
+]
+
+# Groupe 'rl' : Bibliothèques spécialisées pour l'apprentissage par renforcement.
+rl = [
+  "matplotlib>=3.7",         # Génération de visualisations et de courbes d'apprentissage.
+  "stable-baselines3>=2.2", # Implémentations de référence des algorithmes RL (PPO).
+  "torch>=2.0",              # Framework de calcul tensoriel et réseaux de neurones.
+]
+
+[tool.setuptools]
+# Définit 'src' comme le répertoire racine contenant le code source.
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+# Instruction de recherche automatique des modules dans le dossier 'src'.
+where = ["src"]
+
+[tool.pytest.ini_options]
+# Indique le répertoire contenant les tests unitaires pour l'outil Pytest.
+testpaths = ["tests"]
+# '-q' : Mode silencieux pour limiter la verbosité des journaux de tests.
+addopts = "-q"
+
+[tool.ruff]
+# Longueur maximale autorisée pour une ligne de code (100 caractères).
+line-length = 100
+# Version cible de Python pour les optimisations de syntaxe.
+target-version = "py310"
+
+[tool.ruff.lint]
+# 'select' : Définit les familles de règles de codage à appliquer.
+# E/F : Erreurs et logique, I : Ordre des imports, UP : Modernisation syntaxique,
+# B : Prévention de bugs communs, SIM : Simplification du code.
+select = ["E", "F", "I", "UP", "B", "SIM"]
+# 'ignore' : Désactivation spécifique de règles (ex: E501 pour la longueur de ligne).
+ignore = ["E501"]
+
+[tool.mypy]
+# Configuration du vérificateur de types pour assurer la robustesse des données.
+python_version = "3.10"
+warn_return_any = true
+warn_unused_ignores = true
+no_implicit_optional = true
+check_untyped_defs = false
+disallow_untyped_defs = false
+ignore_missing_imports = true # Autorise l'absence de types dans les librairies tierces.
