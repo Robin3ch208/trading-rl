@@ -19,8 +19,10 @@ class ForexTradingEnv(gym.Env[np.ndarray, int]):
     - execution at mid price
     - fixed $ costs per side (commission + spread proxy)
 
+    TP/SL are calculated dynamically at trade entry: TP = tp_atr_multiplier * ATR, SL = sl_atr_multiplier * ATR.
+    
     Reward (current MVP):
-    - close by TP/SL: +tp/sl if pnl>0 else -1 if pnl<0 else 0
+    - close by TP/SL: +tp_atr_multiplier/sl_atr_multiplier if pnl>0 else -1 if pnl<0 else 0
     - if flat and HOLD: neg_reward_for_waiting (to avoid "never trade" collapse)
     """
 
@@ -30,8 +32,8 @@ class ForexTradingEnv(gym.Env[np.ndarray, int]):
         self,
         df: pd.DataFrame,
         initial_balance: float = 10_000.0,
-        tp: float = 0.0002,
-        sl: float = 0.0002,
+        tp_atr_multiplier: float = 10.0,
+        sl_atr_multiplier: float = 10.0,
         commission_per_std_lot_per_side: float = 0.0,
         spread_cost_per_std_lot_per_side: float = 0.0,
         position_size: int = 100_000,
@@ -45,7 +47,8 @@ class ForexTradingEnv(gym.Env[np.ndarray, int]):
         if "hour" not in self.df.columns:
             self.df["hour"] = self.df["datetime"].dt.hour
 
-        required_columns = ["mid_diff/atr", "hour_sin", "hour_cos", "mid", "datetime", "spread"]
+        # ATR is required to calculate TP/SL dynamically, but not in features
+        required_columns = ["mid_diff/atr", "hour_sin", "hour_cos", "mid", "datetime", "spread", "atr"]
         missing = [col for col in required_columns if col not in self.df.columns]
         if missing:
             raise ValueError(
@@ -55,8 +58,8 @@ class ForexTradingEnv(gym.Env[np.ndarray, int]):
 
         self.initial_balance = float(initial_balance)
         self.lookback_window = int(lookback_window)
-        self.base_tp = float(tp)
-        self.base_sl = float(sl)
+        self.tp_atr_multiplier = float(tp_atr_multiplier)
+        self.sl_atr_multiplier = float(sl_atr_multiplier)
         self.position_size = int(position_size)
         self.neg_reward_for_waiting = float(neg_reward_for_waiting)
 
@@ -78,6 +81,8 @@ class ForexTradingEnv(gym.Env[np.ndarray, int]):
         self.position = 0  # -1 short, 0 flat, 1 long
         self.entry_price = 0.0
         self.entry_idx = -1
+        self.entry_tp = 0.0  # TP calculated at entry time (tp_atr_multiplier * ATR)
+        self.entry_sl = 0.0  # SL calculated at entry time (sl_atr_multiplier * ATR)
         self.balance = self.initial_balance
         self.trades_history: list[dict[str, Any]] = []
         self.total_costs = 0.0
@@ -95,6 +100,8 @@ class ForexTradingEnv(gym.Env[np.ndarray, int]):
         self.position = 0
         self.entry_price = 0.0
         self.entry_idx = -1
+        self.entry_tp = 0.0
+        self.entry_sl = 0.0
         self.balance = self.initial_balance
         self.trades_history = []
         self.total_costs = 0.0
@@ -122,6 +129,12 @@ class ForexTradingEnv(gym.Env[np.ndarray, int]):
         # 2) If flat and not closing this step, optionally open a trade
         if not close_trade and self.position == 0 and action in (1, 2):
             current_price = self._get_current_price()
+            current_atr = self._get_current_atr()
+            
+            # Calculate TP/SL dynamically based on current ATR
+            self.entry_tp = self.tp_atr_multiplier * current_atr
+            self.entry_sl = self.sl_atr_multiplier * current_atr
+            
             cost = self._get_cost_per_side()
             self.total_costs += cost
             self.balance -= cost
@@ -130,12 +143,24 @@ class ForexTradingEnv(gym.Env[np.ndarray, int]):
                 self.position = 1
                 self.entry_price = current_price
                 self.entry_idx = self.current_idx
-                info["trade"] = {"action": "buy", "price": self.entry_price}
+                info["trade"] = {
+                    "action": "buy",
+                    "price": self.entry_price,
+                    "tp": self.entry_tp,
+                    "sl": self.entry_sl,
+                    "atr": current_atr,
+                }
             else:
                 self.position = -1
                 self.entry_price = current_price
                 self.entry_idx = self.current_idx
-                info["trade"] = {"action": "sell", "price": self.entry_price}
+                info["trade"] = {
+                    "action": "sell",
+                    "price": self.entry_price,
+                    "tp": self.entry_tp,
+                    "sl": self.entry_sl,
+                    "atr": current_atr,
+                }
 
         # 3) Holding flat gets a small penalty
         if not close_trade and self.position == 0 and action == 0:
@@ -168,17 +193,23 @@ class ForexTradingEnv(gym.Env[np.ndarray, int]):
     def _get_current_price(self) -> float:
         return float(self.df.iloc[self.current_idx]["mid"])
 
+    def _get_current_atr(self) -> float:
+        """Get current ATR value from dataframe."""
+        return float(self.df.iloc[self.current_idx]["atr"])
+
     def _check_tp_sl(self, current_price: float) -> bool:
+        """Check if TP or SL is hit using dynamically calculated values."""
         if self.position == 0:
             return False
 
-        if self.position == 1:
-            tp_price = self.entry_price + self.base_tp
-            sl_price = self.entry_price - self.base_sl
+        if self.position == 1:  # LONG
+            tp_price = self.entry_price + self.entry_tp
+            sl_price = self.entry_price - self.entry_sl
             return current_price >= tp_price or current_price <= sl_price
 
-        tp_price = self.entry_price - self.base_tp
-        sl_price = self.entry_price + self.base_sl
+        # SHORT
+        tp_price = self.entry_price - self.entry_tp
+        sl_price = self.entry_price + self.entry_sl
         return current_price <= tp_price or current_price >= sl_price
 
     def _calculate_pnl(self, exit_price: float) -> float:
@@ -195,6 +226,8 @@ class ForexTradingEnv(gym.Env[np.ndarray, int]):
                 "position": "LONG" if self.position == 1 else "SHORT",
                 "entry_price": float(self.entry_price),
                 "exit_price": float(exit_price),
+                "entry_tp": float(self.entry_tp),  # Store TP used for this trade
+                "entry_sl": float(self.entry_sl),  # Store SL used for this trade
                 "pnl": float(pnl),
                 "reason": reason,
                 "duration": int(self.current_idx - self.entry_idx),
@@ -206,12 +239,15 @@ class ForexTradingEnv(gym.Env[np.ndarray, int]):
         self.position = 0
         self.entry_price = 0.0
         self.entry_idx = -1
+        self.entry_tp = 0.0
+        self.entry_sl = 0.0
 
         return float(pnl)
 
     def _calculate_trade_reward(self, pnl: float) -> float:
+        """Calculate reward using TP/SL ratio (based on ATR multipliers)."""
         if pnl > 0:
-            return float(self.base_tp / self.base_sl)
+            return float(self.tp_atr_multiplier / self.sl_atr_multiplier)
         if pnl < 0:
             return -1.0
         return 0.0

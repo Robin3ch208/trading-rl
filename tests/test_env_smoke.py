@@ -12,6 +12,7 @@ def _make_minimal_featured_df(n: int = 50) -> pd.DataFrame:
             "hour": [10] * n,
             "mid": [1.10000 + 1e-5 * i for i in range(n)],
             "spread": [0.00002] * n,
+            "atr": [0.00001] * n,  # ATR required for dynamic TP/SL calculation
             "mid_diff/atr": [0.0] * n,
             "hour_sin": [0.0] * n,
             "hour_cos": [1.0] * n,

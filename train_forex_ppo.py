@@ -16,8 +16,8 @@ EVAL_TICKS = 100_000
 TOTAL_TIMESTEPS = 500_000
 
 INITIAL_BALANCE = 10_000.0
-TP = 0.0002
-SL = 0.0002
+TP_ATR_MULTIPLIER = 10.0  # TP = 10 * ATR at entry time
+SL_ATR_MULTIPLIER = 10.0  # SL = 10 * ATR at entry time
 COMMISSION_PER_STD_LOT_PER_SIDE = 0.0
 SPREAD_COST_PER_STD_LOT_PER_SIDE = 0.0
 POSITION_SIZE = 100_000
@@ -33,8 +33,8 @@ def make_env(df_slice: pd.DataFrame):
         env = ForexTradingEnv(
             df=df_slice.copy(),
             initial_balance=INITIAL_BALANCE,
-            tp=TP,
-            sl=SL,
+            tp_atr_multiplier=TP_ATR_MULTIPLIER,
+            sl_atr_multiplier=SL_ATR_MULTIPLIER,
             commission_per_std_lot_per_side=COMMISSION_PER_STD_LOT_PER_SIDE,
             spread_cost_per_std_lot_per_side=SPREAD_COST_PER_STD_LOT_PER_SIDE,
             position_size=POSITION_SIZE,
