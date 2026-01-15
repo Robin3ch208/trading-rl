@@ -235,7 +235,7 @@ class ForexTradingEnv(gym.Env[np.ndarray, int]):
             Tuple of (d_low, d_high, pos_range) for the current tick (end-1)
         """
         # Get mid prices in the window [start, end) (end is exclusive)
-        window_mids = self.df.iloc[start:end]["mid"].values
+        window_mids = np.asarray(self.df.iloc[start:end]["mid"].values, dtype=np.float64)
         current_idx = end - 1  # Current tick is the last one in the window
         current_mid = float(self.df.iloc[current_idx]["mid"])
         current_atr = float(self.df.iloc[current_idx]["atr"])
