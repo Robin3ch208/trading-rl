@@ -37,7 +37,7 @@ class ForexTradingEnv(gym.Env[np.ndarray, int]):
         commission_per_std_lot_per_side: float = 0.0,
         spread_cost_per_std_lot_per_side: float = 0.0,
         position_size: int = 100_000,
-        lookback_window: int = 1000,
+        lookback_window: int = 1024,
         neg_reward_for_waiting: float = -0.001,
     ) -> None:
         super().__init__()
@@ -66,8 +66,10 @@ class ForexTradingEnv(gym.Env[np.ndarray, int]):
         self.commission_per_std_lot_per_side = float(commission_per_std_lot_per_side)
         self.spread_cost_per_std_lot_per_side = float(spread_cost_per_std_lot_per_side)
 
+        # Base features from dataframe (vary over time)
         self.features_columns = ["mid_diff/atr", "hour_sin", "hour_cos"]
-        self.n_features = len(self.features_columns)
+        # Total features: 3 base + 3 window-based (d_low, d_high, pos_range)
+        self.n_features = 6
 
         self.action_space = gym.spaces.Discrete(3)
         self.observation_space = gym.spaces.Box(
@@ -179,16 +181,80 @@ class ForexTradingEnv(gym.Env[np.ndarray, int]):
         return self._get_observation(), float(reward), terminated, truncated, info
 
     def _get_observation(self) -> np.ndarray:
-        obs = np.zeros((self.lookback_window, self.n_features), dtype=np.float32)
+        """Build observation with base features + window-based features.
+        
+        Base features (vary over time): mid_diff/atr, hour_sin, hour_cos
+        Window features (constant over window): d_low, d_high, pos_range
+        
+        Window: [current_idx - lookback_window + 1, current_idx] (inclusive both ends)
+        This gives exactly lookback_window elements including current_idx.
+        """
+        # Determine window bounds: [start, current_idx] inclusive
         if self.current_idx < self.lookback_window:
-            if self.current_idx > 0:
-                real_data = self.df.iloc[: self.current_idx][self.features_columns].values
-                obs[-self.current_idx :, :] = real_data
+            start = 0
+            end = self.current_idx + 1  # +1 because iloc is exclusive
+            window_size = end - start
         else:
-            start = self.current_idx - self.lookback_window
-            end = self.current_idx
-            obs[:, :] = self.df.iloc[start:end][self.features_columns].values
+            # start = current_idx - lookback_window + 1 to get exactly lookback_window elements
+            start = self.current_idx - self.lookback_window + 1
+            end = self.current_idx + 1  # +1 because iloc is exclusive
+            window_size = self.lookback_window
+        
+        # Get base features (vary over time)
+        base_features = self.df.iloc[start:end][self.features_columns].values  # (window_size, 3)
+        
+        # Calculate window-based features for current tick (constant over window)
+        d_low, d_high, pos_range = self._calculate_window_features(start, end)
+        
+        # Build full observation
+        obs = np.zeros((self.lookback_window, self.n_features), dtype=np.float32)
+        
+        if self.current_idx < self.lookback_window:
+            # Padding case: fill from the end
+            obs[-window_size:, :3] = base_features
+            obs[-window_size:, 3] = d_low
+            obs[-window_size:, 4] = d_high
+            obs[-window_size:, 5] = pos_range
+        else:
+            # Normal case: fill entire window
+            obs[:, :3] = base_features
+            obs[:, 3] = d_low
+            obs[:, 4] = d_high
+            obs[:, 5] = pos_range
+        
         return obs
+    
+    def _calculate_window_features(self, start: int, end: int) -> tuple[float, float, float]:
+        """Calculate d_low, d_high, pos_range for the current window.
+        
+        Args:
+            start: Start index of the window (inclusive)
+            end: End index of the window (exclusive, so end-1 is the current tick)
+            
+        Returns:
+            Tuple of (d_low, d_high, pos_range) for the current tick (end-1)
+        """
+        # Get mid prices in the window [start, end) (end is exclusive)
+        window_mids = self.df.iloc[start:end]["mid"].values
+        current_idx = end - 1  # Current tick is the last one in the window
+        current_mid = float(self.df.iloc[current_idx]["mid"])
+        current_atr = float(self.df.iloc[current_idx]["atr"])
+        
+        min_mid = float(np.min(window_mids))
+        max_mid = float(np.max(window_mids))
+        range_mid = max_mid - min_mid
+        
+        # d_low: distance from current price to minimum, normalized by ATR
+        d_low = (current_mid - min_mid) / (current_atr + 1e-8)
+        
+        # d_high: distance from maximum to current price, normalized by ATR
+        d_high = (max_mid - current_mid) / (current_atr + 1e-8)
+        
+        # pos_range: relative position in the range [0, 1]
+        eps = 1e-8
+        pos_range = (current_mid - min_mid) / (range_mid + eps)
+        
+        return (d_low, d_high, pos_range)
 
     def _get_current_price(self) -> float:
         return float(self.df.iloc[self.current_idx]["mid"])

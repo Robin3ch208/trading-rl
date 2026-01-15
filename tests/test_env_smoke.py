@@ -25,11 +25,11 @@ def test_env_reset_and_step_hold() -> None:
     env = ForexTradingEnv(df=df, lookback_window=10, neg_reward_for_waiting=-0.123)
 
     obs, info = env.reset()
-    assert obs.shape == (10, 3)  # lookback window * n_features (mid_diff/atr, hour_sin, hour_cos)
+    assert obs.shape == (10, 6)  # lookback window * n_features (3 base + 3 window-based)
     assert info == {}
 
     obs2, reward, terminated, truncated, info2 = env.step(0)  # 0 = HOLD
-    assert obs2.shape == (10, 3)  # lookback window * n_features (mid_diff/atr, hour_sin, hour_cos)
+    assert obs2.shape == (10, 6)  # lookback window * n_features (3 base + 3 window-based)
     assert reward == -0.123
     assert terminated is False
     assert isinstance(truncated, bool)
